@@ -1,154 +1,216 @@
-# OAuth Atlas — Integration Guide Builder
+# OAuth Launchpad
 
-An AI-assisted OAuth integration research tool that helps developers understand provider setup requirements, implementation effort, potential blockers, and approval uncertainties. Users can enter an app name or website and generate a source-backed integration guide.
+OAuth Launchpad is a research-agent backend for developers who need to connect an external app to an AI agent. You type an application name or website. The backend searches the public web, reasons over the evidence, and returns a structured OAuth setup guide.
 
-## Features
+The guide is meant to be honest: it tells you where to start, what you must do yourself, what remains unknown, and which official pages support the steps. It does **not** sign in to the provider, create an OAuth app, or handle secrets for you.
 
-- **Live guide generation:** Enter an app URL, requested permissions, and integration goal.
-- **AI-assisted research:** Investigates provider documentation and generates actionable setup steps.
-- **Effort estimation:** Provides estimated hands-on time and difficulty.
-- **Evidence and uncertainty:** Surfaces sources, prerequisites, known blockers, and details requiring verification.
-- **Developer handoff:** Distinguishes actions the developer must perform from AI-generated guidance.
-- **Persistent guides:** Saves generated guides so they can be retrieved by their guide ID.
+This repository is the Python API. A frontend can later render the JSON guides.
 
-## Tech Stack
+## What this product does
 
-- **Backend:** Python, FastAPI
-- **Frontend:** HTML, CSS, JavaScript
-- **AI:** OpenRouter-compatible chat completions API
-- **Web research:** Tavily Search API
-- **Storage:** SQLite
+- Accepts an app name or website plus an optional integration goal.
+- Plans a short web investigation with Mistral.
+- Searches with Tavily (no arbitrary user-URL fetching, so this API is not an SSRF proxy).
+- Reviews evidence gaps and may run at most one extra search round.
+- Generates a validated OAuth setup guide.
+- Stores generated guides in SQLite so you can retrieve them by ID.
+- Serves a small built-in library for GitHub, Slack, and Google Calendar even when API keys are missing.
+
+Live generation requires working Mistral and Tavily keys. The starter library does not.
+
+## System architecture
+
+```mermaid
+flowchart TD
+    client[Developer or frontend] -->|HTTP JSON| api[FastAPI]
+    api -->|GET /api/library| seed[seed_guides.json]
+    api -->|POST /api/guides/generate| agent[Research agent]
+    agent --> planner[Mistral planner prompt]
+    agent --> tavily[Tavily Search API]
+    agent --> reviewer[Mistral evidence-review prompt]
+    agent --> writer[Mistral guide-generator prompt]
+    agent --> validator[Programmatic evidence validator]
+    validator --> sqlite[SQLite guides.db]
+    api -->|GET /api/guides/id| sqlite
+```
+
+## Research-agent workflow in plain English
+
+1. **Understand the request.** The backend trims the input. If you pasted a URL, it extracts the hostname without fetching that URL. Private or loopback hosts are rejected.
+2. **Plan.** Mistral returns a small JSON plan: likely product name, candidate domain, 3–5 search queries, and uncertainties. It is not allowed to invent provider facts or pretend it already searched.
+3. **Search.** Tavily runs those queries. Results are deduplicated by URL, classified as official / secondary / uncertain by domain (not by a flashy title), and truncated before they go back to the model.
+4. **Review gaps.** A second Mistral prompt checks whether creation steps, redirects, scopes, publishing, and verification are covered. It may suggest at most two extra searches. The backend runs those at most once.
+5. **Write the guide.** A third prompt produces JSON. Webpage text is wrapped as untrusted data so prompt injection in search snippets cannot override the rules.
+6. **Validate.** Pydantic checks the schema. Invalid JSON gets one repair attempt. Citations that do not match retrieved sources are dropped and marked uncertain. A guide cannot claim it was tested unless a real test attempt was recorded (this backend never records one).
+7. **Save and return.** The guide gets a stable ID and timestamp, is stored in SQLite, and is returned to the caller.
+
+If keys are missing, Tavily returns nothing useful, or the app cannot be identified, the API returns a clear error. It does not quietly invent a successful guide.
 
 ## Prerequisites
 
-- Python 3.11 or later
-- Git (optional, for cloning the repository)
-- API keys for the configured AI provider and Tavily Search
+- Windows 10 or later
+- Python 3.11 or newer (this project was implemented against Python 3.11)
+- A [Mistral](https://console.mistral.ai/) API key
+- A [Tavily](https://tavily.com/) API key
 
-## Setup and Run Locally
+You do **not** need API keys to browse the library or run the automated tests.
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/oauth-atlas.git
-cd oauth-atlas
-```
-
-Alternatively, download the repository ZIP from GitHub and extract it.
-
-### 2. Create and activate a virtual environment
-
-On Windows PowerShell:
+## Windows PowerShell setup
 
 ```powershell
+cd D:\Documents\Product\assignments\Composio_OAuth
+
+python --version
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
 
-If PowerShell blocks activation, you can use the environment's Python executable directly in the following steps.
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 
-### 3. Install dependencies
-
-From the project root, run:
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-### 4. Configure environment variables
-
-Create your local `.env` file by copying `.env.example`:
-
-```powershell
 Copy-Item .env.example .env
+notepad .env
 ```
 
-Open `.env` and enter your own API credentials. Never commit `.env` or expose API keys in the frontend or repository.
-
-Configure the required variables using the names and formats provided in `.env.example`. For the OpenRouter setup used during development, the relevant settings include:
-
-```dotenv
-MISTRAL_API_KEY=your_openrouter_api_key
-MISTRAL_MODEL=dots-studio/dots-3-note-preview:free
-MISTRAL_URL=https://openrouter.ai/api/v1/chat/completions
-MISTRAL_MAX_TOKENS=6000
-TAVILY_API_KEY=your_tavily_api_key
-CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173
-```
-
-Use the remaining configuration values and variable names from `.env.example`. Free model availability and output behavior may vary.
-
-### 5. Start the backend
-
-Open a PowerShell terminal in the project root:
+If PowerShell blocks the virtual environment script, run this once for your user account, then activate again:
 
 ```powershell
-python -m uvicorn app.main:app --reload --port 8000
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
-The backend will be available at:
+## Configure `.env`
 
-- API: `http://127.0.0.1:8000`
-- API documentation: `http://127.0.0.1:8000/docs`
-- Health check: `http://127.0.0.1:8000/health`
+Open `.env` and fill in:
 
-Keep this terminal running.
+```
+MISTRAL_API_KEY=your_mistral_key
+MISTRAL_MODEL=mistral-small-latest
+TAVILY_API_KEY=your_tavily_key
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+```
 
-### 6. Start the frontend
+Optional tuning (all have defaults):
 
-Open a **second PowerShell terminal**:
+```
+TAVILY_SEARCH_DEPTH=basic
+TAVILY_MAX_RESULTS=5
+TAVILY_TIMEOUT_SECONDS=30
+MISTRAL_TIMEOUT_SECONDS=45
+HTTP_MAX_ATTEMPTS=3
+DATABASE_PATH=data\guides.db
+```
+
+Never commit `.env`. Never put keys in prompts, logs, or API responses. The backend reads keys only from the environment.
+
+## Run the API locally
 
 ```powershell
-cd oauth_atlas_local_frontend
-python -m http.server 3000 --bind 127.0.0.1
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload --port 8000
 ```
 
-If you are already in the frontend folder, run only the second command.
+- Health check: http://127.0.0.1:8000/health
+- Swagger UI: http://127.0.0.1:8000/docs
+- OpenAPI JSON: http://127.0.0.1:8000/openapi.json
 
-Open the application in your browser:
+CORS allows only the origins listed in `CORS_ORIGINS` (local frontend ports by default), not `*`.
 
-`http://localhost:3000`
+## Run tests
 
-### 7. Generate an integration guide
+The automated tests **mock** Tavily and Mistral. Passing tests means the orchestration, validation, and HTTP layer work. They are **not** evidence that GitHub, Slack, Google, Tavily, or Mistral were exercised live.
 
-1. Enter an app name or website, such as `notion.so`.
-2. Describe the requested permissions, if applicable.
-3. Explain what the integration should do.
-4. Generate the guide.
-5. Review the setup steps, effort estimate, prerequisites, blockers, sources, and items requiring verification.
-
-Generated guides are stored by the backend and can be retrieved using their guide IDs through the API, subject to the implemented endpoints.
-
-## Project Structure
-
-```text
-oauth-atlas/
-├── app/                         # FastAPI backend and research logic
-├── oauth_atlas_local_frontend/  # Browser-based frontend
-├── tests/                       # Automated tests
-├── .env.example                 # Environment configuration template
-├── .gitignore
-├── requirements.txt
-└── README.md
+```powershell
+.\.venv\Scripts\Activate.ps1
+pytest
 ```
 
-The exact files may vary slightly depending on the repository version.
+## Example API requests
 
-## Limitations
+Health:
 
-- This is a focused take-home prototype, not a production-ready OAuth integration platform.
-- Generated guidance depends on the availability and quality of retrieved documentation and AI model responses.
-- Effort and approval-time estimates are indicative and may vary by provider, application type, and review requirements.
-- Researching a provider does not mean that its OAuth setup or approval process has been completed or tested.
-- Some details may remain uncertain and should be verified against official provider documentation before production use.
-- The free AI model router may select different models, and generation can occasionally fail.
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+```
 
-## Security
+Library (works without API keys):
 
-- API credentials must remain in the local `.env` file.
-- `.env` and local development artifacts should not be committed to Git.
-- Use environment variables or a secrets manager for deployed environments.
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/api/library
+```
 
-## Status
+Generate a guide (needs live keys; this calls Mistral and Tavily):
 
-Built as an Associate Product Manager take-home assignment to explore how AI-assisted research can help developers make progress on unfamiliar OAuth setup and approval workflows.
+```powershell
+$body = @{
+  app_name_or_url = "linear.app"
+  integration_goal = "Allow an AI agent to create and update issues"
+  requested_scopes = @()
+} | ConvertTo-Json
+
+$result = Invoke-RestMethod `
+  -Uri http://127.0.0.1:8000/api/guides/generate `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+
+$result.status
+$result.guide.id
+$result.guide.summary
+```
+
+Retrieve that guide later:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8000/api/guides/$($result.guide.id)"
+```
+
+Using curl.exe if you prefer:
+
+```powershell
+curl.exe http://127.0.0.1:8000/health
+curl.exe -X POST http://127.0.0.1:8000/api/guides/generate -H "Content-Type: application/json" -d "{\"app_name_or_url\":\"linear.app\",\"integration_goal\":\"Allow an AI agent to create and update issues\",\"requested_scopes\":[]}"
+```
+
+## What is live vs mocked
+
+| Action | Live services? |
+| --- | --- |
+| `GET /health` | No |
+| `GET /api/library` | No; reads `data/seed_guides.json` |
+| `pytest` | No; Tavily and Mistral are mocked |
+| `POST /api/guides/generate` | Yes; Mistral Chat Completions and Tavily Search |
+| `GET /api/guides/{id}` | No extra APIs; reads SQLite |
+
+## Known limitations
+
+- The agent reads search snippets. It does not log into developer consoles or complete OAuth.
+- Approval waits are allowed to be `unknown`, `documented`, `provider_dependent`, or `none_indicated`. If a provider does not publish a timeline in the retrieved sources, the guide must leave it unknown. Do not treat an estimate as a measured wait.
+- Source citations support a step; they do not prove every detail of that step.
+- Library cards for GitHub, Slack, and Google Calendar are **source review only**. They were not produced by creating real OAuth apps in those products.
+- Google verification timelines, Slack App Directory review, and GitHub Marketplace listing were not human-tested here. Check the linked official docs before promising a date to stakeholders.
+- Direct fetching of user-supplied URLs is intentionally disabled.
+
+## Using a generated guide in a frontend
+
+`POST /api/guides/generate` returns JSON with `status`, `message`, `guide`, and `research_activity`.
+
+Useful `guide` fields for UI:
+
+- `summary`, `difficulty`, `difficulty_reason`, `time_estimate`
+- `prerequisites`, `steps` (owner, `human_handoff`, `evidence_status`)
+- `blockers`, `unknowns`, `next_action`
+- `sources` (open the exact URLs)
+- `testing_record` (expect `tested: false` unless you add a real test harness later)
+- `research_activity` (audit of searches and model calls, not chain-of-thought)
+
+Store `guide.id` and reload it with `GET /api/guides/{guide_id}` after a page refresh.
+
+## Validation notes (implementation-time)
+
+These items were **not** verified by a human completing provider setup. They should be re-checked against current official docs before a launch decision:
+
+- GitHub App vs OAuth App recommendation for a given agent architecture
+- Slack App Directory / distribution review, if the app will be public
+- Google OAuth verification and any Calendar scope sensitivity for production users outside a test audience
+- Exact current scope names for any provider
+
+Automated tests in this repo are mocked. Live Mistral and Tavily calls succeed only when you run generate with valid keys.

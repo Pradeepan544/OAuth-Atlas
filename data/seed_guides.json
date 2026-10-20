@@ -1,0 +1,71 @@
+[
+  {
+    "id": "github-oauth",
+    "app_name": "GitHub",
+    "official_domain": "github.com",
+    "difficulty": "moderate",
+    "description": "GitHub supports OAuth 2.0 through OAuth apps and also recommends GitHub Apps for many new integrations. A developer typically registers an app under GitHub Settings > Developer settings, sets homepage and authorization callback URLs, then uses the authorization code flow. This library card is based on official documentation review only; this project has not created a GitHub OAuth app or completed a live authorization.",
+    "source_links": [
+      {
+        "title": "Creating an OAuth app",
+        "url": "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app"
+      },
+      {
+        "title": "Authorizing OAuth apps",
+        "url": "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps"
+      },
+      {
+        "title": "Best practices for creating an OAuth app",
+        "url": "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/best-practices-for-creating-an-oauth-app"
+      }
+    ],
+    "review_status": "source_review_only",
+    "notes": "GitHub's docs currently encourage considering a GitHub App instead of an OAuth app. Do not treat this card as proof of Marketplace listing requirements or of a provider approval wait; those were not verified by a live setup."
+  },
+  {
+    "id": "slack-oauth",
+    "app_name": "Slack",
+    "official_domain": "slack.com",
+    "difficulty": "moderate",
+    "description": "Slack apps authenticate with OAuth 2.0 (Slack's V2 OAuth flow). A developer generally creates an app at the Slack API site, configures redirect URLs, and requests bot or user scopes needed for the integration. Public distribution or App Directory listing can add extra requirements. This card is source review only; this project has not created a Slack app or installed it into a workspace.",
+    "source_links": [
+      {
+        "title": "Installing with OAuth",
+        "url": "https://api.slack.com/authentication/oauth-v2"
+      },
+      {
+        "title": "Authenticating with OAuth",
+        "url": "https://docs.slack.dev/authentication/installing-with-oauth/"
+      },
+      {
+        "title": "Slack API authentication overview",
+        "url": "https://api.slack.com/authentication"
+      }
+    ],
+    "review_status": "source_review_only",
+    "notes": "Workspace installation, token rotation, and any App Directory review are documented topics to inspect in official Slack materials. No approval timeline is recorded here because it was not verified during implementation."
+  },
+  {
+    "id": "google-calendar-oauth",
+    "app_name": "Google Calendar",
+    "official_domain": "developers.google.com",
+    "difficulty": "high",
+    "description": "Google Calendar access uses Google's OAuth 2.0 / Google Identity flows and a Google Cloud project. Developers typically enable the Calendar API, configure an OAuth consent screen, create OAuth client credentials, and request Calendar scopes. Apps that request sensitive or restricted scopes, or that serve users outside a tested group, may need Google's OAuth verification. This card is source review only; this project has not created a Cloud project or completed consent-screen verification.",
+    "source_links": [
+      {
+        "title": "Using OAuth 2.0 to access Google APIs",
+        "url": "https://developers.google.com/identity/protocols/oauth2"
+      },
+      {
+        "title": "Authorize requests to the Google Calendar API",
+        "url": "https://developers.google.com/workspace/calendar/api/guides/auth"
+      },
+      {
+        "title": "OAuth API verification FAQs",
+        "url": "https://support.google.com/cloud/answer/9110914"
+      }
+    ],
+    "review_status": "source_review_only",
+    "notes": "Verification and brand review can apply depending on user type and scopes. Treat any wait as provider-dependent and unknown until Google's current verification docs are checked for the exact scopes. Do not assume a number of days from this library card."
+  }
+]
